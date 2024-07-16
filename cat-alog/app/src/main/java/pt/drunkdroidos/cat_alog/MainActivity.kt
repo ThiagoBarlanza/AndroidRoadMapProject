@@ -7,11 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import pt.drunkdroidos.cat_alog.ui.theme.CatalogTheme
+import pt.drunkdroidos.cat_alog.view.GameBoard
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,8 +20,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             CatalogTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
+                    GameBoard(
+                        score = 2,
+                        highlighted = 0,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -30,18 +31,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
 @Preview(showBackground = true)
 @Composable
-fun GreetingPreview() {
+fun GamePreview() {
     CatalogTheme {
-        Greeting("Android")
+        GameBoard(score = 2, highlighted = 0)
     }
 }
