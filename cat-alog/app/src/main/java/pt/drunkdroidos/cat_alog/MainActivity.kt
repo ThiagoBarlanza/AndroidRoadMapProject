@@ -7,10 +7,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,15 +31,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pt.drunkdroidos.cat_alog.ui.theme.CatalogTheme
 import java.io.IOException
+import kotlin.random.Random
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,22 +62,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun GameScreen(modifier: Modifier = Modifier, initialClickCount: Int = 0) {
-    // Click count state
-    var clickCount by rememberSaveable { mutableStateOf(initialClickCount) }
+    var sequence by rememberSaveable { mutableStateOf(mutableMapOf<Int, String>()) }
+    var userSequence by rememberSaveable { mutableStateOf(listOf<Int>()) }
+    var isShowingSequence by rememberSaveable { mutableStateOf(false) }
+    var gameOver by rememberSaveable { mutableStateOf(false) }
+    var score by rememberSaveable { mutableStateOf(0) }
+    var currentImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var isGameStarted by rememberSaveable { mutableStateOf(false) }
 
-    // Score save state
-    var score by rememberSaveable { mutableStateOf("Score: $clickCount") }
-
-    // URl's list state
-    var imageUrls by rememberSaveable { mutableStateOf(listOf<String>()) }
-
-    val gridState = rememberLazyGridState()
-
-    // Coroutine scope for scrolling
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
 
-    // MediaPlayer for cat sound
-    val mediaPlayer = remember {
+    val startSoundPlayer = remember {
         MediaPlayer().apply {
             try {
                 setDataSource("https://drive.google.com/uc?export=download&id=15wFVSkyDzCOp42ePqiaqSBCPXUZhjZqG")
@@ -85,13 +84,46 @@ fun GameScreen(modifier: Modifier = Modifier, initialClickCount: Int = 0) {
         }
     }
 
-    // Function to generate new seed each click
-    fun generateNewSeed(): String {
-        return "seed$clickCount"
+    val imageUrlBase = "https://cataas.com/cat"
+
+    fun generateNewImageUrl(): String {
+        val randomSeed = Random.nextInt(1000, 9999)
+        return "$imageUrlBase?s=$randomSeed"
     }
 
-    // URL base to API cat images
-    val imageUrlBase = "https://cataas.com/cat"
+    fun getRandomAvailablePosition(): Int? {
+        val availablePositions = (0 until 16).filter { !sequence.containsKey(it) }
+        return if (availablePositions.isNotEmpty()) availablePositions.random() else null
+    }
+
+    fun startNewRound() {
+        val newImageUrl = generateNewImageUrl()
+        val newPosition = getRandomAvailablePosition()
+        if (newPosition != null) {
+            sequence[newPosition] = newImageUrl
+            userSequence = listOf()
+            isShowingSequence = true
+            coroutineScope.launch {
+                for ((index, _) in sequence) {
+                    currentImageIndex = index
+                    delay(1000)
+                }
+                currentImageIndex = null
+                isShowingSequence = false
+            }
+        } else {
+            gameOver = true // No available positions left, game over
+        }
+    }
+
+    fun checkUserSequence() {
+        if (userSequence.map { sequence[it] } == sequence.values.toList()) {
+            score++
+            startNewRound()
+        } else {
+            gameOver = true
+        }
+    }
 
     Box(
         modifier = modifier
@@ -99,73 +131,125 @@ fun GameScreen(modifier: Modifier = Modifier, initialClickCount: Int = 0) {
             .background(Color.LightGray),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Cat Game Show!",
-                modifier = Modifier.padding(20.dp),
-                style = TextStyle(
-                    color = Color.Red,
-                    fontSize = 20.sp
-                )
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(16.dp)
+        if (!isGameStarted) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Button(
-                    onClick = {
-                        if (mediaPlayer.isPlaying) {
-                            mediaPlayer.seekTo(0)
-                        } else {
-                            mediaPlayer.start()
+                Text(
+                    text = "Cat-Alog",
+                    modifier = Modifier.padding(20.dp),
+                    style = TextStyle(
+                        color = Color.Red,
+                        fontSize = 20.sp
+                    )
+                )
+                Button(onClick = {
+                    startSoundPlayer.seekTo(0)
+                    startSoundPlayer.start()
+                    isGameStarted = true
+                    startNewRound()
+                }) {
+                    Text("Start")
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (gameOver) {
+                    Text(
+                        text = "Game Over! Score: $score",
+                        modifier = Modifier.padding(20.dp),
+                        style = TextStyle(
+                            color = Color.Red,
+                            fontSize = 20.sp
+                        )
+                    )
+                    Button(
+                        onClick = {
+                            startSoundPlayer.seekTo(0)
+                            startSoundPlayer.start()
+                            sequence.clear()
+                            userSequence = listOf()
+                            gameOver = false
+                            score = 0
+                            startNewRound()
                         }
-
-                        clickCount++
-                        score = "Score: $clickCount"
-                        val newImageUrl = "$imageUrlBase?${generateNewSeed()}"
-                        imageUrls = imageUrls + newImageUrl
-
-                        // Scroll to the newly added item
-                        coroutineScope.launch {
-                            gridState.scrollToItem(imageUrls.size - 1)
+                    ) {
+                        Text("Restart")
+                    }
+                } else {
+                    Text(
+                        text = "Cat-Alog",
+                        modifier = Modifier.padding(20.dp),
+                        style = TextStyle(
+                            color = Color.Red,
+                            fontSize = 20.sp
+                        )
+                    )
+                    Text(
+                        text = "Score: $score",
+                        modifier = Modifier.padding(8.dp),
+                        style = TextStyle(
+                            color = Color.Red,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 14.sp
+                        )
+                    )
+                    if (isShowingSequence) {
+                        currentImageIndex?.let { index ->
+                            val imageUrl = sequence[index]
+                            val painter = rememberAsyncImagePainter(imageUrl)
+                            Image(
+                                painter = painter,
+                                contentDescription = "Current Image",
+                                modifier = Modifier
+                                    .size(140.dp)
+                                    .padding(2.dp)
+                            )
+                        }
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(4),
+                            state = rememberLazyGridState(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            items((0 until 16).toList()) { index ->
+                                val imageUrl = sequence[index]
+                                if (imageUrl != null) {
+                                    val painter = rememberAsyncImagePainter(imageUrl)
+                                    Image(
+                                        painter = painter,
+                                        contentDescription = "Selectable Image",
+                                        modifier = Modifier
+                                            .size(140.dp)
+                                            .padding(2.dp)
+                                            .clickable {
+                                                userSequence = userSequence + index
+                                                if (userSequence.size == sequence.size) {
+                                                    checkUserSequence()
+                                                }
+                                            }
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(140.dp)
+                                            .padding(2.dp)
+                                            .background(Color.Gray)
+                                    )
+                                }
+                            }
                         }
                     }
-                ) {
-                    Text("New Cat")
-                }
-                Text(
-                    text = score,
-                    modifier = Modifier.padding(8.dp),
-                    style = TextStyle(
-                        color = Color.DarkGray,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 14.sp
-                    )
-                )
-            }
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 70.dp),
-                state = gridState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                items(imageUrls) { imageUrl ->
-                    val painter = rememberAsyncImagePainter(imageUrl)
-                    Image(
-                        painter = painter,
-                        contentDescription = "Dynamic Image",
-                        modifier = Modifier
-                            .size(140.dp)
-                            .padding(2.dp)
-                    )
                 }
             }
         }
